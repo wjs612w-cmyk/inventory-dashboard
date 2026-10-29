@@ -2,7 +2,7 @@ import { CATEGORIES } from '../config'
 
 const sel = 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink focus:outline-2 focus:outline-brand'
 
-export default function Filters({ category, setCategory, brand, setBrand, brands, basis, setBasis, counts, query, setQuery, hideInactive, setHideInactive, moveFilter, setMoveFilter }) {
+export default function Filters({ category, setCategory, brand, setBrand, brands, basis, setBasis, counts, query, setQuery, hideInactive, setHideInactive, moveFilter, setMoveFilter, group, setGroup, groups, sub, setSub, subs }) {
   const chip = (active) =>
     `rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
       active ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-brand'
@@ -28,6 +28,30 @@ export default function Filters({ category, setCategory, brand, setBrand, brands
             ))}
           </select>
         </label>
+
+        {category !== '전체' && groups.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            카테고리
+            <select value={group} onChange={(e) => setGroup(e.target.value)} className={sel}>
+              <option value="전체">전체 카테고리</option>
+              {groups.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {group !== '전체' && subs.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            하위카테고리
+            <select value={sub} onChange={(e) => setSub(e.target.value)} className={sel}>
+              <option value="전체">전체 하위카테고리</option>
+              {subs.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="flex items-center gap-2 text-sm text-slate-600">
           일 평균 출고 기준

@@ -16,6 +16,7 @@ export const COLUMNS = {
   category: '품목군', // A열
   brand: '브랜드', // B열
   group: '카테고리',
+  sub: '하위카테고리', // 선택 열: 마스크=사이즈, 캡슐세제=향 등. 없으면 카테고리까지만 드릴다운
   sku: '완제품 품번',
   name: '품목',
   salesPlan: '당월 영업계획',

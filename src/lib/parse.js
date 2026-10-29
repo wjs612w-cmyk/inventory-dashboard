@@ -40,7 +40,7 @@ function parseRows(rows) {
   const header = rows[hi].map(norm)
   const idx = {}
   const missing = []
-  const OPTIONAL = new Set(['prev2Shipped']) // 없어도 동작하는 열
+  const OPTIONAL = new Set(['prev2Shipped', 'sub']) // 없어도 동작하는 열
   for (const [key, title] of Object.entries(COLUMNS)) {
     const i = header.indexOf(norm(title))
     if (i < 0 && !OPTIONAL.has(key)) missing.push(title)
@@ -69,6 +69,7 @@ function parseRows(rows) {
       category,
       brand: str(r, 'brand') || '(브랜드 없음)',
       group: str(r, 'group') || '(미분류)',
+      sub: idx.sub >= 0 ? str(r, 'sub') || '(미분류)' : null,
       sku: str(r, 'sku'),
       name,
       salesPlan,

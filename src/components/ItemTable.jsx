@@ -112,7 +112,7 @@ export default function ItemTable({ rows, ctx, months }) {
                     <td className="max-w-[340px] px-3 py-2">
                       <button onClick={() => setOpenId(open ? null : it.id)} aria-expanded={open} className="w-full text-left focus-visible:outline-2 focus-visible:outline-brand">
                         <span className="block truncate font-medium" title={it.name}>{it.name}</span>
-                        <span className="block text-xs text-slate-500">{it.category} · {it.brand} · {it.group}</span>
+                        <span className="block text-xs text-slate-500">{[it.category, it.brand, it.group, it.sub].filter((x) => x && x !== '(미분류)').join(' · ')}</span>
                       </button>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(it.stock)}</td>

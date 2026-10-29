@@ -28,7 +28,7 @@ export default function ItemDetail({ item, m, ctx, monthly }) {
           </ResponsiveContainer>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          {item.sku && `품번 ${item.sku} · `}{item.category} · {item.brand} · {item.group}
+          {item.sku && `품번 ${item.sku} · `}{[item.category, item.brand, item.group, item.sub].filter((x) => x && x !== '(미분류)').join(' · ')}
         </p>
       </div>
 

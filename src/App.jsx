@@ -7,6 +7,9 @@ import KpiCards from './components/KpiCards'
 import TrendChart from './components/TrendChart'
 import TrendCards from './components/TrendCards'
 import ItemTable from './components/ItemTable'
+import Breadcrumb from './components/Breadcrumb'
+
+const uniq = (arr) => [...new Set(arr)].sort((a, b) => a.localeCompare(b, 'ko'))
 
 // 급증 정렬용 값: 기준 미달(null)은 맨 뒤, 신규(Infinity)는 맨 앞
 const spikeKey = (m) => (m.spikeRatio == null ? -1 : Math.min(m.spikeRatio, 1e9))
@@ -23,6 +26,8 @@ export default function App() {
   const [hideInactive, setHideInactive] = useState(true)
   const [trendMode, setTrendMode] = useState('qty')
   const [moveFilter, setMoveFilter] = useState('0')
+  const [group, setGroup] = useState('전체') // 카테고리(C열)
+  const [sub, setSub] = useState('전체') // 하위카테고리
   const [trendView, setTrendView] = useState('cards')
   const [period, setPeriod] = useState('week')
 
@@ -63,10 +68,20 @@ export default function App() {
   // 품목군(A열) → 브랜드(B열) → 검색어 순으로 좁힘
   const byCategory = useMemo(() => (category === '전체' ? base : base.filter((i) => i.category === category)), [base, category])
   const brands = useMemo(() => [...new Set(byCategory.map((i) => i.brand))].sort((a, b) => a.localeCompare(b, 'ko')), [byCategory])
+  // 드릴다운: 품목군 → 브랜드 → 카테고리 → 하위카테고리 (각 단계의 선택지는 앞 단계 선택 안에서만 만듭니다)
+  const byBrand = useMemo(() => (brand === '전체' ? byCategory : byCategory.filter((i) => i.brand === brand)), [byCategory, brand])
+  const groups = useMemo(() => uniq(byBrand.map((i) => i.group)), [byBrand])
+  const byGroup = useMemo(() => (group === '전체' ? byBrand : byBrand.filter((i) => i.group === group)), [byBrand, group])
+  const subs = useMemo(() => {
+    const real = uniq(byGroup.map((i) => i.sub).filter((s) => s && s !== '(미분류)'))
+    if (real.length === 0) return [] // 하위카테고리 값이 없으면 이 단계는 건너뜁니다
+    return byGroup.some((i) => i.sub === '(미분류)') ? [...real, '(미분류)'] : real
+  }, [byGroup])
+
   const scoped = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return byCategory.filter((i) => (brand === '전체' || i.brand === brand) && (!q || i.name.toLowerCase().includes(q) || i.sku.includes(q)))
-  }, [byCategory, brand, query])
+    return byGroup.filter((i) => (sub === '전체' || i.sub === sub) && (!q || i.name.toLowerCase().includes(q) || i.sku.includes(q)))
+  }, [byGroup, sub, query])
 
   // 판매 급증·급감 판정 (품목군·브랜드·검색 조건 안에서)
   const moveMetrics = useMemo(() => new Map(scoped.map((i) => [i.id, computeMetrics(i, opts)])), [scoped, opts])
@@ -93,8 +108,13 @@ export default function App() {
   const summary = useMemo(() => summarize(filtered, opts), [filtered, opts])
 
   // 전체 → 품목군별 / 품목군 선택 → 브랜드별 / 브랜드까지 선택 → 카테고리(C열)별
-  const groupKey = category === '전체' ? 'category' : brand === '전체' ? 'brand' : 'group'
-  const groupLabel = { category: '품목군별', brand: '브랜드별', group: '카테고리별' }[groupKey]
+  const groupKey =
+    category === '전체' ? 'category'
+    : brand === '전체' ? 'brand'
+    : group === '전체' ? 'group'
+    : sub === '전체' && subs.length > 0 ? 'sub'
+    : 'name'
+  const groupLabel = { category: '품목군별', brand: '브랜드별', group: '카테고리별', sub: '하위카테고리별', name: '품목별' }[groupKey]
   const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series), [filtered, groupKey, trendMode, series])
 
   const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series), [filtered, groupKey, series])
@@ -115,10 +135,31 @@ export default function App() {
     return r.sort(cmp)
   }, [filtered, opts, sort])
 
+  // 윗 단계를 바꾸면 아래 단계 선택은 초기화합니다
   const handleCategory = (c) => {
     setCategory(c)
     setBrand('전체')
+    setGroup('전체')
+    setSub('전체')
   }
+  const handleBrand = (b) => {
+    setBrand(b)
+    setGroup('전체')
+    setSub('전체')
+  }
+  const handleGroup = (g) => {
+    setGroup(g)
+    setSub('전체')
+  }
+  const handleSub = (s) => setSub(s)
+
+  const crumbs = [
+    { label: '전체', go: () => handleCategory('전체') },
+    category !== '전체' && { label: category, go: () => handleCategory(category) },
+    brand !== '전체' && { label: brand, go: () => handleBrand(brand) },
+    group !== '전체' && { label: group, go: () => handleGroup(group) },
+    sub !== '전체' && { label: sub, go: () => handleSub(sub) },
+  ].filter(Boolean)
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
@@ -143,7 +184,9 @@ export default function App() {
 
       <Filters
         category={category} setCategory={handleCategory}
-        brand={brand} setBrand={setBrand} brands={brands}
+        brand={brand} setBrand={handleBrand} brands={brands}
+        group={group} setGroup={handleGroup} groups={groups}
+        sub={sub} setSub={handleSub} subs={subs}
         basis={basis} setBasis={setBasis} counts={counts}
         query={query} setQuery={setQuery}
         hideInactive={hideInactive} setHideInactive={setHideInactive}
@@ -159,6 +202,7 @@ export default function App() {
       ) : (
         <>
           <KpiCards s={summary} ctx={ctx} />
+          <Breadcrumb crumbs={crumbs} />
           {trendView === 'cards' ? (
             <TrendCards
               summary={groupSummary}
@@ -169,7 +213,7 @@ export default function App() {
               setPeriod={setPeriod}
               info={periodInfo}
               note={periodInfo.note}
-              onSelect={groupKey === 'category' ? handleCategory : groupKey === 'brand' ? setBrand : undefined}
+              onSelect={{ category: handleCategory, brand: handleBrand, group: handleGroup, sub: handleSub }[groupKey]}
             />
           ) : (
             <TrendChart
@@ -221,7 +265,7 @@ export default function App() {
               ))}
               <span className="text-xs text-slate-500">급증 = 직전 3주 평균의 2배 이상, 급감 = 절반 이하</span>
             </div>
-            <ItemTable key={`${category}|${brand}|${query}|${sort}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} months={months} />
+            <ItemTable key={`${category}|${brand}|${group}|${sub}|${query}|${sort}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} months={months} />
           </section>
         </>
       )}
