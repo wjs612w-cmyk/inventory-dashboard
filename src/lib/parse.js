@@ -6,10 +6,12 @@ const norm = (s) => String(s ?? '').replace(/\s+/g, '')
 // "1,234" → 1234, "99.28%" → 99.28, 빈 값 → null
 export const toNum = (v) => {
   if (v == null) return null
-  const s = String(v).replace(/[,%\s]/g, '')
+  let s = String(v).replace(/[,%\s]/g, '')
   if (s === '') return null
+  const neg = /^\(.*\)$/.test(s) // (1,234) 처럼 괄호로 쓴 음수
+  if (neg) s = s.slice(1, -1)
   const n = Number(s)
-  return Number.isFinite(n) ? n : null
+  return Number.isFinite(n) ? (neg ? -n : n) : null
 }
 
 function download(url) {

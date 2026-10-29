@@ -18,9 +18,9 @@ function Card({ g, onSelect, info }) {
       disabled={!onSelect}
       className="rounded-lg border border-slate-200 bg-white p-3 text-left enabled:hover:border-brand focus-visible:outline-2 focus-visible:outline-brand"
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate font-semibold">{g.name}</span>
-        <span className="shrink-0 text-xs text-slate-500">{g.count}개 품목</span>
+      <div className="flex items-start justify-between gap-2">
+        <span className="line-clamp-2 break-keep font-semibold" title={g.name}>{g.label ?? g.name}</span>
+        {g.count > 1 && <span className="shrink-0 text-xs text-slate-500">{g.count}개 품목</span>}
       </div>
       <div className="mt-1 flex items-baseline gap-1.5">
         <span className="text-2xl font-semibold tabular-nums">{fmt(g.cur)}</span>
@@ -75,7 +75,7 @@ function Card({ g, onSelect, info }) {
   )
 }
 
-export default function TrendCards({ summary, title, view, setView, period, setPeriod, info, note, onSelect }) {
+export default function TrendCards({ summary, title, view, setView, period, setPeriod, info, note, onSelect, shortened }) {
   const { groups, hidden, total } = summary
   return (
     <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
@@ -107,6 +107,7 @@ export default function TrendCards({ summary, title, view, setView, period, setP
       <p className="text-xs text-slate-500">
         카드마다 눈금이 달라서 모양은 "증감 흐름"만 보여 줍니다. 규모 비교는 숫자를 보세요. 초록 ▲ 는 늘어남, 빨강 ▼ 는 줄어듦({info.c1} 대비)입니다.
         {note}
+        {shortened && ' 품목명은 대부분의 품목에 공통인 부분(브랜드·라인 등)을 줄여서 보여 줘요. 카드에 마우스를 올리면 전체 이름이 나옵니다.'}
         {onSelect && ' 카드를 누르면 그 항목만 골라서 볼 수 있어요.'}
         {hidden > 0 && ` 규모가 작은 ${hidden}개 항목은 생략했습니다.`}
       </p>

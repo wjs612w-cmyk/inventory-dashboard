@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSheetData } from './hooks'
 import { CATEGORIES, FORECAST_SOURCE, SUB_ORDER } from './config'
-import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, sortByOrder, summarize } from './lib/metrics'
+import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, makeShortLabels, sortByOrder, summarize } from './lib/metrics'
 import Filters from './components/Filters'
 import KpiCards from './components/KpiCards'
 import TrendChart from './components/TrendChart'
@@ -117,9 +117,12 @@ export default function App() {
   const groupLabel = { category: '품목군별', brand: '브랜드별', group: '카테고리별', sub: '하위카테고리별', name: '품목별' }[groupKey]
   // 하위카테고리 단계에서는 config.js의 SUB_ORDER 순서(예: 마스크 대형→중형→소형…)로 보여 줍니다
   const subOrder = groupKey === 'sub' ? SUB_ORDER[category] ?? null : null
-  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series, 8, subOrder), [filtered, groupKey, trendMode, series, subOrder])
+  // 품목 단계에서는 긴 품목명 대신 구분되는 부분(색상·입수 등)만 보여 줍니다
+  const nameLabels = useMemo(() => (groupKey === 'name' ? makeShortLabels(scoped.map((i) => i.name)) : null), [scoped, groupKey])
+  const labelOf = useMemo(() => (nameLabels ? (n) => nameLabels.get(n) ?? n : null), [nameLabels])
+  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series, 8, subOrder, labelOf), [filtered, groupKey, trendMode, series, subOrder, labelOf])
 
-  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series, 12, subOrder), [filtered, groupKey, series, subOrder])
+  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series, 12, subOrder, labelOf), [filtered, groupKey, series, subOrder, labelOf])
 
   const rows = useMemo(() => {
     const order = { danger: 0, warn: 1, ok: 2 }
@@ -215,6 +218,7 @@ export default function App() {
               setPeriod={setPeriod}
               info={periodInfo}
               note={periodInfo.note}
+              shortened={groupKey === 'name'}
               onSelect={{ category: handleCategory, brand: handleBrand, group: handleGroup, sub: handleSub }[groupKey]}
             />
           ) : (
@@ -229,7 +233,7 @@ export default function App() {
               period={period}
               setPeriod={setPeriod}
               baseLabel={periodInfo.base}
-              note={periodInfo.note}
+              note={periodInfo.note + (groupKey === 'name' ? ' 범례의 품목명은 공통 부분을 줄인 이름입니다.' : '')}
             />
           )}
 

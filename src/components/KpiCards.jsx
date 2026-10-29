@@ -15,6 +15,10 @@ export const paceTone = (p) => (p == null ? 'default' : p >= 100 ? 'good' : p >=
 
 export default function KpiCards({ s, ctx }) {
   const cover = s.dailyAvg > 0 ? s.total.stock / s.dailyAvg : null
+  // 진도율·입고율은 '계획이 있는 품목'만으로 계산합니다. 계획 없는 품목의 출고·입고는 총량과 따로 보여 줍니다.
+  const t = s.total
+  const shippedTxt = t.shipped !== t.planShipped ? `총 출고 ${fmt(t.shipped)} 중 영업계획 있는 품목 ${fmt(t.planShipped)}` : `출고 ${fmt(t.shipped)}`
+  const inboundTxt = t.inbound !== t.planInbound ? `총 입고 ${fmt(t.inbound)} 중 생산계획 있는 품목 ${fmt(t.planInbound)}` : `입고 ${fmt(t.inbound)}`
   return (
     <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Kpi
@@ -25,7 +29,7 @@ export default function KpiCards({ s, ctx }) {
       <Kpi
         title="생산계획 대비 입고율"
         value={fmtPct(s.inboundRate)}
-        sub={`입고 ${fmt(s.total.planInbound)} / 생산계획 ${fmt(s.total.prodPlan)} · 잔여 입고 ${fmt(s.pendingInbound)}`}
+        sub={`${inboundTxt} / 생산계획 ${fmt(t.prodPlan)} · 잔여 입고 ${fmt(s.pendingInbound)}`}
         tone={s.inboundRate == null ? 'default' : s.inboundRate >= 90 ? 'good' : s.inboundRate >= 60 ? 'warn' : 'danger'}
       />
       <Kpi
@@ -37,7 +41,7 @@ export default function KpiCards({ s, ctx }) {
       <Kpi
         title="영업계획 진도율"
         value={fmtPct(s.pace)}
-        sub={`100% = 계획 페이스 · 누적 달성 ${fmtPct(s.achieved)} (출고 ${fmt(s.total.planShipped)} / 계획 ${fmt(s.total.salesPlan)}) · 월말 예상 ${fmt(s.forecast)}`}
+        sub={`100% = 계획 페이스 · 누적 달성 ${fmtPct(s.achieved)} (${shippedTxt} / 계획 ${fmt(t.salesPlan)}) · 월말 예상 ${fmt(s.forecast)}`}
         tone={paceTone(s.pace)}
       />
     </section>

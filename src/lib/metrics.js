@@ -103,6 +103,32 @@ export function summarize(items, opts) {
   }
 }
 
+// 카드·범례에 쓸 짧은 품목명: 대부분(80% 이상)의 품목에 공통으로 들어 있는 낱말(브랜드·라인·규격 등)을 빼고
+// 품목을 구분해 주는 부분(색상·입수 등)만 남깁니다. 비면 원래 이름, 줄인 이름이 겹치면 겹친 품목은 원래 이름을 씁니다.
+const tokenize = (s) => String(s).replace(/\]/g, '] ').split(/[_\s]+/).filter(Boolean)
+export function makeShortLabels(names, share = 0.8) {
+  const list = [...new Set(names)]
+  const map = new Map()
+  if (list.length < 2) {
+    list.forEach((n) => map.set(n, n))
+    return map
+  }
+  const sets = list.map(tokenize)
+  const freq = new Map()
+  sets.forEach((ts) => new Set(ts).forEach((t) => freq.set(t, (freq.get(t) || 0) + 1)))
+  const need = Math.ceil(list.length * share)
+  list.forEach((n, i) => {
+    const rest = sets[i].filter((t) => freq.get(t) < need)
+    map.set(n, rest.length ? rest.join(' ') : n)
+  })
+  const count = new Map()
+  map.forEach((l) => count.set(l, (count.get(l) || 0) + 1))
+  list.forEach((n) => {
+    if (count.get(map.get(n)) > 1) map.set(n, n)
+  })
+  return map
+}
+
 // 지정한 순서(order)대로 정렬. 목록에 없는 값은 맨 뒤에 원래 순서를 유지한 채 붙습니다. (공백은 무시)
 export function sortByOrder(list, order, key = (x) => x) {
   if (!order) return list
@@ -114,7 +140,7 @@ export function sortByOrder(list, order, key = (x) => x) {
 }
 
 // 그룹별 추이. mode: 'qty' 수량 / 'index' 지수(첫 기간 = 100). 그룹이 많으면 상위 N-1 + 기타
-export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_SERIES, limit = 8, order = null) {
+export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_SERIES, limit = 8, order = null, labelOf = null) {
   const n = series.labels.length
   const groups = new Map()
   items.forEach((it) => {
@@ -131,11 +157,12 @@ export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_S
     entries = [...entries.slice(0, limit - 1), ['기타', other]]
   }
   if (order) entries = sortByOrder(entries, order, (e) => e[0])
-  const names = entries.map((e) => e[0])
+  const disp = (nm) => (labelOf ? labelOf(nm) : nm)
+  const names = entries.map((e) => disp(e[0]))
   const data = series.labels.map((label, i) => {
     const row = { label }
     entries.forEach(([nm, w]) => {
-      row[nm] = mode === 'index' ? (w[0] > 0 ? Math.round((w[i] / w[0]) * 1000) / 10 : null) : w[i]
+      row[disp(nm)] = mode === 'index' ? (w[0] > 0 ? Math.round((w[i] / w[0]) * 1000) / 10 : null) : w[i]
     })
     return row
   })
@@ -152,7 +179,7 @@ export const fmt = (n, d = 0) =>
 export const fmtPct = (n, d = 1) => (n == null || !Number.isFinite(n) ? '–' : `${n.toFixed(d)}%`)
 
 // 대표 보고용 카드 요약: 그룹별 현재 기간 값 · 직전 기간 대비 · 처음 기간 대비
-export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit = 12, order = null) {
+export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit = 12, order = null, labelOf = null) {
   const n = series.labels.length
   const map = new Map()
   items.forEach((it) => {
@@ -165,7 +192,7 @@ export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit =
   const pct = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null)
   const calc = (e) => {
     const cur = e.series[n - 1]
-    return { ...e, cur, chg1: n >= 2 ? pct(cur, e.series[n - 2]) : null, chgFirst: n >= 3 ? pct(cur, e.series[0]) : null }
+    return { ...e, cur, label: labelOf ? labelOf(e.name) : e.name, chg1: n >= 2 ? pct(cur, e.series[n - 2]) : null, chgFirst: n >= 3 ? pct(cur, e.series[0]) : null }
   }
   const all = [...map.values()].map(calc).sort((a, b) => b.cur - a.cur)
   const totalSeries = new Array(n).fill(0)
