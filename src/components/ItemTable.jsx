@@ -21,11 +21,56 @@ const moveCell = (m) => {
   return { text: `×${r.toFixed(1)}`, cls: r >= 1.5 ? 'font-semibold text-violet-700' : r <= 0.67 ? 'font-semibold text-orange-700' : '' }
 }
 
-// rows: [{ it, m }]. 필터·정렬이 바뀌면 부모에서 key를 바꿔 펼침/페이지 상태를 초기화합니다.
-export default function ItemTable({ rows, ctx }) {
+// 열 정의: first = 제목을 처음 눌렀을 때의 정렬 방향 (품목·상태는 오름차순, 숫자는 큰 값부터)
+const COLS = [
+  { key: 'name', label: '품목', get: (r) => r.it.name, text: true, first: 'asc' },
+  { key: 'stock', label: '현재고', get: (r) => r.it.stock, right: true, first: 'desc' },
+  { key: 'daily', label: '일 평균 출고', get: (r) => r.m.dailyAvg, right: true, first: 'desc' },
+  { key: 'trend', label: '4주 추이', get: (r) => r.it.weekly[3], first: 'desc', title: '최근 7일 판매량 기준으로 정렬됩니다' },
+  { key: 'wow', label: '전주 대비', get: (r) => r.m.wow, right: true, first: 'desc' },
+  { key: 'move', label: '직전 3주 대비', get: (r) => r.m.spikeRatio ?? r.m.dropRatio, right: true, first: 'desc', title: '최근 7일 판매 ÷ 직전 3주 주간 평균. 1보다 크면 증가, 작으면 감소' },
+  { key: 'inbound', label: '입고율', get: (r) => r.m.inboundRate, right: true, first: 'desc' },
+  { key: 'proj', label: '월말 예상 재고', get: (r) => r.m.projectedEnd, right: true, first: 'desc' },
+  { key: 'pace', label: '영업 진도율', get: (r) => r.m.pace, right: true, first: 'desc' },
+  { key: 'risk', label: '상태', get: (r) => ({ danger: 0, warn: 1, ok: 2 })[r.m.risk], first: 'asc', title: '오름차순 = 위험한 품목이 먼저' },
+]
+
+// 빈 값(–)은 방향과 상관없이 항상 맨 뒤로 보냅니다.
+function sortRows(rows, col, dir) {
+  const mul = dir === 'asc' ? 1 : -1
+  return [...rows].sort((a, b) => {
+    const x = col.get(a)
+    const y = col.get(b)
+    const xn = x == null || Number.isNaN(x)
+    const yn = y == null || Number.isNaN(y)
+    if (xn && yn) return 0
+    if (xn) return 1
+    if (yn) return -1
+    if (col.text) return mul * String(x).localeCompare(String(y), 'ko')
+    if (x === y) return 0
+    return x < y ? -mul : mul
+  })
+}
+
+// rows: [{ it, m }]. 필터·정렬 드롭다운이 바뀌면 부모에서 key를 바꿔 펼침/페이지/열 정렬 상태를 초기화합니다.
+export default function ItemTable({ rows, ctx, months }) {
   const [limit, setLimit] = useState(PAGE)
   const [openId, setOpenId] = useState(null)
-  const shown = rows.slice(0, limit)
+  const [sort, setSort] = useState(null) // { key, dir } | null (null = 위쪽 정렬 드롭다운 순서)
+
+  const activeCol = sort && COLS.find((c) => c.key === sort.key)
+  const sorted = activeCol ? sortRows(rows, activeCol, sort.dir) : rows
+  const shown = sorted.slice(0, limit)
+
+  // 같은 열을 누를 때마다: 처음 방향 → 반대 방향 → 해제
+  const onSort = (col) => {
+    setLimit(PAGE)
+    setSort((s) => {
+      if (!s || s.key !== col.key) return { key: col.key, dir: col.first }
+      if (s.dir === col.first) return { key: col.key, dir: col.first === 'asc' ? 'desc' : 'asc' }
+      return null
+    })
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -33,16 +78,27 @@ export default function ItemTable({ rows, ctx }) {
         <table className="w-full min-w-[1060px] text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-medium">품목</th>
-              <th className="px-3 py-2 text-right font-medium">현재고</th>
-              <th className="px-3 py-2 text-right font-medium">일 평균 출고</th>
-              <th className="px-3 py-2 font-medium">4주 추이</th>
-              <th className="px-3 py-2 text-right font-medium">전주 대비</th>
-              <th className="px-3 py-2 text-right font-medium" title="최근 7일 판매 ÷ 직전 3주 주간 평균. 1보다 크면 증가, 작으면 감소">직전 3주 대비</th>
-              <th className="px-3 py-2 text-right font-medium">입고율</th>
-              <th className="px-3 py-2 text-right font-medium">월말 예상 재고</th>
-              <th className="px-3 py-2 text-right font-medium">영업 진도율</th>
-              <th className="px-3 py-2 font-medium">상태</th>
+              {COLS.map((col) => {
+                const active = sort?.key === col.key
+                return (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2 font-medium"
+                    aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  >
+                    <button
+                      onClick={() => onSort(col)}
+                      title={col.title || '눌러서 정렬 (한 번 더: 반대 방향, 세 번째: 해제)'}
+                      className={`inline-flex w-full items-center gap-1 whitespace-nowrap hover:text-ink focus-visible:outline-2 focus-visible:outline-brand ${col.right ? 'justify-end' : ''} ${active ? 'font-semibold text-ink' : ''}`}
+                    >
+                      {col.label}
+                      <span aria-hidden className={active ? 'text-brand' : 'text-slate-300'}>
+                        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    </button>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -81,7 +137,7 @@ export default function ItemTable({ rows, ctx }) {
                   </tr>
                   {open && (
                     <tr>
-                      <td colSpan={10} className="p-0"><ItemDetail item={it} m={m} ctx={ctx} /></td>
+                      <td colSpan={COLS.length} className="p-0"><ItemDetail item={it} m={m} ctx={ctx} monthly={{ labels: months.labels, values: months.get(it) }} /></td>
                     </tr>
                   )}
                 </Fragment>
@@ -90,10 +146,10 @@ export default function ItemTable({ rows, ctx }) {
           </tbody>
         </table>
       </div>
-      {rows.length > limit && (
+      {sorted.length > limit && (
         <div className="border-t border-slate-100 p-3 text-center">
           <button onClick={() => setLimit((l) => l + PAGE)} className="rounded-md border border-slate-300 px-4 py-1.5 text-sm hover:border-brand">
-            {Math.min(PAGE, rows.length - limit)}개 더 보기 ({limit}/{rows.length})
+            {Math.min(PAGE, sorted.length - limit)}개 더 보기 ({limit}/{sorted.length})
           </button>
         </div>
       )}

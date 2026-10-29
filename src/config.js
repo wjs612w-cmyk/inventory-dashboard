@@ -21,6 +21,7 @@ export const COLUMNS = {
   salesPlan: '당월 영업계획',
   sheetProgress: '계획 진도율',
   nextSalesPlan: '다음달 영업계획',
+  prev2Shipped: '전전월 출고량', // 선택 열: 없으면 월별 그래프가 2개월만 표시됩니다
   prevShipped: '전월 출고량',
   shipped: '당월 출고량',
   sheetForecast: '당월 예상 판매량',
@@ -43,3 +44,8 @@ export const SPIKE_MIN_QTY = 100
 
 // 판매 급감 판단 시, 직전 3주 주간 평균이 이 값 미만인 품목(원래 거의 안 팔리던 품목)은 무시합니다.
 export const DROP_MIN_QTY = 100
+
+// 월별 그래프의 당월(예상) 값을 어디서 가져올지
+//  'sheet' = 시트의 '당월 예상 판매량' 열 (현재 시트는 30일 기준으로 계산되어 있음)
+//  'calc'  = 당월 출고량 ÷ 경과일 × 이번 달 일수로 직접 계산
+export const FORECAST_SOURCE = 'sheet'

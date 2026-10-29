@@ -40,9 +40,10 @@ function parseRows(rows) {
   const header = rows[hi].map(norm)
   const idx = {}
   const missing = []
+  const OPTIONAL = new Set(['prev2Shipped']) // 없어도 동작하는 열
   for (const [key, title] of Object.entries(COLUMNS)) {
     const i = header.indexOf(norm(title))
-    if (i < 0) missing.push(title)
+    if (i < 0 && !OPTIONAL.has(key)) missing.push(title)
     idx[key] = i
   }
   if (missing.length) throw new Error(`시트에서 찾지 못한 열: ${missing.join(', ')}`)
@@ -61,6 +62,7 @@ function parseRows(rows) {
     const prodPlan = n0(r, 'prodPlan')
     const shipped = n0(r, 'shipped')
     const inbound = n0(r, 'inbound')
+    const sheetForecast = n0(r, 'sheetForecast')
 
     items.push({
       id: `${i}-${str(r, 'sku')}`,
@@ -72,8 +74,9 @@ function parseRows(rows) {
       salesPlan,
       nextSalesPlan: n0(r, 'nextSalesPlan'),
       sheetProgress: num(r, 'sheetProgress'),
-      sheetForecast: n0(r, 'sheetForecast'),
+      sheetForecast,
       prevShipped: n0(r, 'prevShipped'),
+      prev2Shipped: idx.prev2Shipped >= 0 ? n0(r, 'prev2Shipped') : null,
       shipped,
       prodPlan,
       nextProdPlan: n0(r, 'nextProdPlan'),
@@ -81,6 +84,7 @@ function parseRows(rows) {
       stock: n0(r, 'stock'),
       // 계획이 있는 품목만 진도율·입고율 집계에 포함하기 위한 보조 값
       planShipped: salesPlan > 0 ? shipped : 0,
+      planForecast: salesPlan > 0 ? sheetForecast : 0,
       planInbound: prodPlan > 0 ? inbound : 0,
       // 과거 → 최근
       weekly: [n0(r, 'w4'), n0(r, 'w3'), n0(r, 'w2'), n0(r, 'w1')],

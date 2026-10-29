@@ -1,4 +1,4 @@
-import { WEEK_LABELS, SPIKE_MIN_QTY, DROP_MIN_QTY } from '../config'
+import { WEEK_LABELS, SPIKE_MIN_QTY, DROP_MIN_QTY, FORECAST_SOURCE } from '../config'
 
 const sum = (a) => a.reduce((x, y) => x + y, 0)
 
@@ -8,6 +8,24 @@ export function getMonthContext(elapsedFromSheet, today = new Date()) {
   const fallback = Math.max(1, today.getDate() - 1)
   const elapsed = Math.min(daysInMonth, Math.max(1, elapsedFromSheet || fallback))
   return { month: today.getMonth() + 1, daysInMonth, elapsed, remaining: daysInMonth - elapsed, fromSheet: !!elapsedFromSheet }
+}
+
+// 월말 예상 출고(판매)량: 시트의 '당월 예상 판매량' 또는 직접 계산 (config.js의 FORECAST_SOURCE)
+export function forecastOf(it, ctx) {
+  if (FORECAST_SOURCE === 'sheet' && it.sheetForecast > 0) return it.sheetForecast
+  return (it.shipped / ctx.elapsed) * ctx.daysInMonth
+}
+
+// 그래프용 기간 정의: 주간(최근 4주) / 월별(전전월·전월·당월 예상)
+export const WEEK_SERIES = { labels: WEEK_LABELS, get: (it) => it.weekly }
+
+export function makeMonthSeries(ctx, hasPrev2) {
+  const m = ctx.month
+  const mm = (k) => ((m - 1 - k + 12) % 12) + 1 // k개월 전의 '월'
+  const all = [`${mm(2)}월`, `${mm(1)}월`, `${m}월(예상)`]
+  return hasPrev2
+    ? { labels: all, get: (it) => [it.prev2Shipped ?? 0, it.prevShipped, forecastOf(it, ctx)] }
+    : { labels: all.slice(1), get: (it) => [it.prevShipped, forecastOf(it, ctx)] }
 }
 
 /**
@@ -29,7 +47,7 @@ export function computeMetrics(item, { basis = '7', ctx }) {
   const pace =
     item.salesPlan > 0 ? (item.planShipped / (item.salesPlan * (ctx.elapsed / ctx.daysInMonth))) * 100 : item.sheetProgress
   const achieved = item.salesPlan > 0 ? (item.planShipped / item.salesPlan) * 100 : null // 계획 대비 누적 달성률
-  const forecast = (item.shipped / ctx.elapsed) * ctx.daysInMonth // 월말 예상 판매량
+  const forecast = forecastOf(item, ctx) // 월말 예상 판매량
 
   const coverDays = dailyAvg > 0 ? item.stock / dailyAvg : null
   const wow = w2 > 0 ? ((w1 - w2) / w2) * 100 : null
@@ -57,11 +75,12 @@ export function aggregate(items) {
       a.salesPlan += it.salesPlan
       a.shipped += it.shipped
       a.planShipped += it.planShipped
+      a.planForecast += it.planForecast
       a.prevShipped += it.prevShipped
       a.weekly = a.weekly.map((v, i) => v + it.weekly[i])
       return a
     },
-    { stock: 0, prodPlan: 0, inbound: 0, planInbound: 0, salesPlan: 0, shipped: 0, planShipped: 0, prevShipped: 0, weekly: [0, 0, 0, 0] }
+    { stock: 0, prodPlan: 0, inbound: 0, planInbound: 0, salesPlan: 0, shipped: 0, planShipped: 0, planForecast: 0, prevShipped: 0, weekly: [0, 0, 0, 0] }
   )
 }
 
@@ -78,33 +97,34 @@ export function summarize(items, opts) {
     inboundRate: t.prodPlan > 0 ? (t.planInbound / t.prodPlan) * 100 : null,
     pace: t.salesPlan > 0 ? (t.planShipped / (t.salesPlan * (ctx.elapsed / ctx.daysInMonth))) * 100 : null,
     achieved: t.salesPlan > 0 ? (t.planShipped / t.salesPlan) * 100 : null,
-    forecast: (t.planShipped / ctx.elapsed) * ctx.daysInMonth,
+    forecast: FORECAST_SOURCE === 'sheet' ? t.planForecast : (t.planShipped / ctx.elapsed) * ctx.daysInMonth,
     danger: ms.filter((m) => m.risk === 'danger').length,
     warn: ms.filter((m) => m.risk === 'warn').length,
   }
 }
 
-// 그룹별 주차 추이. mode: 'qty' 수량 / 'index' 지수(22~28일 전 = 100). 그룹이 많으면 상위 N-1 + 기타
-export function buildGroupedTrend(items, groupKey, mode = 'qty', limit = 8) {
+// 그룹별 추이. mode: 'qty' 수량 / 'index' 지수(첫 기간 = 100). 그룹이 많으면 상위 N-1 + 기타
+export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_SERIES, limit = 8) {
+  const n = series.labels.length
   const groups = new Map()
   items.forEach((it) => {
     const g = it[groupKey] || '(없음)'
-    const w = groups.get(g) || [0, 0, 0, 0]
-    it.weekly.forEach((v, i) => (w[i] += v))
+    const w = groups.get(g) || new Array(n).fill(0)
+    series.get(it).forEach((v, i) => (w[i] += v))
     groups.set(g, w)
   })
   let entries = [...groups.entries()].sort((a, b) => sum(b[1]) - sum(a[1]))
   if (entries.length > limit) {
     const rest = entries.slice(limit - 1)
-    const other = [0, 0, 0, 0]
+    const other = new Array(n).fill(0)
     rest.forEach(([, w]) => w.forEach((v, i) => (other[i] += v)))
     entries = [...entries.slice(0, limit - 1), ['기타', other]]
   }
   const names = entries.map((e) => e[0])
-  const data = WEEK_LABELS.map((label, i) => {
+  const data = series.labels.map((label, i) => {
     const row = { label }
-    entries.forEach(([n, w]) => {
-      row[n] = mode === 'index' ? (w[0] > 0 ? Math.round((w[i] / w[0]) * 1000) / 10 : null) : w[i]
+    entries.forEach(([nm, w]) => {
+      row[nm] = mode === 'index' ? (w[0] > 0 ? Math.round((w[i] / w[0]) * 1000) / 10 : null) : w[i]
     })
     return row
   })
@@ -120,21 +140,25 @@ export const fmt = (n, d = 0) =>
   n == null || !Number.isFinite(n) ? '–' : n.toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: d })
 export const fmtPct = (n, d = 1) => (n == null || !Number.isFinite(n) ? '–' : `${n.toFixed(d)}%`)
 
-// 대표 보고용 카드 요약: 그룹별 최근 7일 판매 · 전주 대비 · 4주 전 대비
-export function buildGroupSummary(items, groupKey, limit = 12) {
+// 대표 보고용 카드 요약: 그룹별 현재 기간 값 · 직전 기간 대비 · 처음 기간 대비
+export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit = 12) {
+  const n = series.labels.length
   const map = new Map()
   items.forEach((it) => {
     const g = it[groupKey] || '(없음)'
-    const e = map.get(g) || { name: g, weekly: [0, 0, 0, 0], count: 0 }
-    it.weekly.forEach((v, i) => (e.weekly[i] += v))
+    const e = map.get(g) || { name: g, series: new Array(n).fill(0), count: 0 }
+    series.get(it).forEach((v, i) => (e.series[i] += v))
     e.count += 1
     map.set(g, e)
   })
+  const pct = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null)
   const calc = (e) => {
-    const [w4, w3, w2, w1] = e.weekly
-    return { ...e, w1, wow: w2 > 0 ? ((w1 - w2) / w2) * 100 : null, vs4: w4 > 0 ? ((w1 - w4) / w4) * 100 : null }
+    const cur = e.series[n - 1]
+    return { ...e, cur, chg1: n >= 2 ? pct(cur, e.series[n - 2]) : null, chgFirst: n >= 3 ? pct(cur, e.series[0]) : null }
   }
-  const all = [...map.values()].map(calc).sort((a, b) => b.w1 - a.w1)
-  const total = calc({ name: '전체', weekly: aggregate(items).weekly, count: items.length })
+  const all = [...map.values()].map(calc).sort((a, b) => b.cur - a.cur)
+  const totalSeries = new Array(n).fill(0)
+  items.forEach((it) => series.get(it).forEach((v, i) => (totalSeries[i] += v)))
+  const total = calc({ name: '전체', series: totalSeries, count: items.length })
   return { groups: all.slice(0, limit), hidden: Math.max(0, all.length - limit), total }
 }

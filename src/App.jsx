@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSheetData } from './hooks'
-import { CATEGORIES } from './config'
-import { buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, summarize } from './lib/metrics'
+import { CATEGORIES, FORECAST_SOURCE } from './config'
+import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, summarize } from './lib/metrics'
 import Filters from './components/Filters'
 import KpiCards from './components/KpiCards'
 import TrendChart from './components/TrendChart'
@@ -24,9 +24,34 @@ export default function App() {
   const [trendMode, setTrendMode] = useState('qty')
   const [moveFilter, setMoveFilter] = useState('0')
   const [trendView, setTrendView] = useState('cards')
+  const [period, setPeriod] = useState('week')
 
   const ctx = useMemo(() => getMonthContext(elapsedDays), [elapsedDays])
   const opts = useMemo(() => ({ basis, ctx }), [basis, ctx])
+
+  // 월별 흐름: 전전월(선택 열) · 전월 · 당월(예상)
+  const hasPrev2 = useMemo(() => items.some((i) => i.prev2Shipped != null), [items])
+  const months = useMemo(() => makeMonthSeries(ctx, hasPrev2), [ctx, hasPrev2])
+  const series = period === 'month' ? months : WEEK_SERIES
+  const periodInfo = useMemo(
+    () =>
+      period === 'week'
+        ? { cur: '최근 7일', c1: '전주', cf: '4주 전', short: ['4주 전', '3주 전', '2주 전', '최근'], estimate: false, base: '22~28일 전', note: '' }
+        : {
+            cur: `${ctx.month}월 예상`,
+            c1: '전월',
+            cf: hasPrev2 ? '2개월 전' : null,
+            short: months.labels,
+            estimate: true,
+            base: months.labels[0],
+            note:
+              (FORECAST_SOURCE === 'sheet'
+                ? ` ${ctx.month}월(예상)은 시트의 '당월 예상 판매량' 값입니다.`
+                : ` ${ctx.month}월(예상)은 당월 출고량 ÷ 경과일 × 월 일수로 계산한 값입니다.`) +
+              (hasPrev2 ? '' : " 시트에서 '전전월 출고량' 열을 찾지 못해 2개월만 표시합니다."),
+          },
+    [period, ctx, hasPrev2, months]
+  )
 
   const base = useMemo(() => (hideInactive ? items.filter((i) => !isInactive(i)) : items), [items, hideInactive])
   const counts = useMemo(() => {
@@ -70,9 +95,9 @@ export default function App() {
   // 전체 → 품목군별 / 품목군 선택 → 브랜드별 / 브랜드까지 선택 → 카테고리(C열)별
   const groupKey = category === '전체' ? 'category' : brand === '전체' ? 'brand' : 'group'
   const groupLabel = { category: '품목군별', brand: '브랜드별', group: '카테고리별' }[groupKey]
-  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode), [filtered, groupKey, trendMode])
+  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series), [filtered, groupKey, trendMode, series])
 
-  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey), [filtered, groupKey])
+  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series), [filtered, groupKey, series])
 
   const rows = useMemo(() => {
     const order = { danger: 0, warn: 1, ok: 2 }
@@ -137,18 +162,34 @@ export default function App() {
           {trendView === 'cards' ? (
             <TrendCards
               summary={groupSummary}
-              title={`${groupLabel} 주차별 판매 흐름`}
+              title={`${groupLabel} ${period === 'week' ? '주차별' : '월별'} 판매 흐름`}
               view={trendView}
               setView={setTrendView}
+              period={period}
+              setPeriod={setPeriod}
+              info={periodInfo}
+              note={periodInfo.note}
               onSelect={groupKey === 'category' ? handleCategory : groupKey === 'brand' ? setBrand : undefined}
             />
           ) : (
-            <TrendChart data={trend.data} names={trend.names} title={`${groupLabel} 주차별 판매 흐름`} mode={trendMode} setMode={setTrendMode} view={trendView} setView={setTrendView} />
+            <TrendChart
+              data={trend.data}
+              names={trend.names}
+              title={`${groupLabel} ${period === 'week' ? '주차별' : '월별'} 판매 흐름`}
+              mode={trendMode}
+              setMode={setTrendMode}
+              view={trendView}
+              setView={setTrendView}
+              period={period}
+              setPeriod={setPeriod}
+              baseLabel={periodInfo.base}
+              note={periodInfo.note}
+            />
           )}
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold">품목 상세 <span className="ml-1 text-sm font-normal text-slate-500">행을 누르면 주차별 그래프와 세부 지표가 펼쳐집니다</span></h2>
+              <h2 className="text-base font-semibold">품목 상세 <span className="ml-1 text-sm font-normal text-slate-500">행을 누르면 세부 지표가 펼쳐지고, 열 제목을 누르면 정렬됩니다</span></h2>
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 정렬
                 <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-ink">
@@ -180,7 +221,7 @@ export default function App() {
               ))}
               <span className="text-xs text-slate-500">급증 = 직전 3주 평균의 2배 이상, 급감 = 절반 이하</span>
             </div>
-            <ItemTable key={`${category}|${brand}|${query}|${sort}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} />
+            <ItemTable key={`${category}|${brand}|${query}|${sort}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} months={months} />
           </section>
         </>
       )}

@@ -10,7 +10,7 @@ function Stat({ label, value, tone }) {
   )
 }
 
-export default function ItemDetail({ item, m, ctx }) {
+export default function ItemDetail({ item, m, ctx, monthly }) {
   const chart = weeklyToChart(item.weekly)
   return (
     <div className="grid gap-4 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -38,7 +38,9 @@ export default function ItemDetail({ item, m, ctx }) {
         <Stat label="월말 예상 판매" value={fmt(m.forecast)} />
         <Stat label="영업계획 진도율" value={fmtPct(m.pace)} />
         <Stat label="계획 대비 누적 달성" value={fmtPct(m.achieved)} />
-        <Stat label="전월 출고량" value={fmt(item.prevShipped)} />
+        {monthly.labels.slice(0, -1).map((l, i) => (
+          <Stat key={l} label={`${l} 출고량`} value={fmt(monthly.values[i])} />
+        ))}
         <Stat label="당월 생산계획" value={fmt(item.prodPlan)} />
         <Stat label="당월 입고 수량" value={fmt(item.inbound)} />
         <Stat label="입고율" value={fmtPct(m.inboundRate)} />
