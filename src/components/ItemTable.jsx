@@ -36,9 +36,14 @@ const COLS = [
 ]
 
 // 빈 값(–)은 방향과 상관없이 항상 맨 뒤로 보냅니다.
-function sortRows(rows, col, dir) {
+function sortRows(rows, col, dir, groupBy) {
   const mul = dir === 'asc' ? 1 : -1
   return [...rows].sort((a, b) => {
+    // 위쪽 정렬이 '묶음'(예: 재고 위험 순의 상태별)이면 묶음 순서를 먼저 지키고, 그 안에서만 열 정렬을 적용
+    if (groupBy) {
+      const g = groupBy(a) - groupBy(b)
+      if (g !== 0) return g
+    }
     const x = col.get(a)
     const y = col.get(b)
     const xn = x == null || Number.isNaN(x)
@@ -53,13 +58,14 @@ function sortRows(rows, col, dir) {
 }
 
 // rows: [{ it, m }]. 필터·정렬 드롭다운이 바뀌면 부모에서 key를 바꿔 펼침/페이지/열 정렬 상태를 초기화합니다.
-export default function ItemTable({ rows, ctx, months }) {
+export default function ItemTable({ rows, ctx, months, sortLabel, groupBy }) {
   const [limit, setLimit] = useState(PAGE)
   const [openId, setOpenId] = useState(null)
   const [sort, setSort] = useState(null) // { key, dir } | null (null = 위쪽 정렬 드롭다운 순서)
 
   const activeCol = sort && COLS.find((c) => c.key === sort.key)
-  const sorted = activeCol ? sortRows(rows, activeCol, sort.dir) : rows
+  // rows는 위쪽 정렬 순서로 들어오고, 정렬은 안정적이라 열 값이 같으면 위쪽 정렬 순서가 그대로 유지됩니다.
+  const sorted = activeCol ? sortRows(rows, activeCol, sort.dir, groupBy) : rows
   const shown = sorted.slice(0, limit)
 
   // 같은 열을 누를 때마다: 처음 방향 → 반대 방향 → 해제
@@ -74,6 +80,14 @@ export default function ItemTable({ rows, ctx, months }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {activeCol && (
+        <p className="border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+          {groupBy
+            ? `'${sortLabel}'(상태별 묶음) 안에서 '${activeCol.label}' ${sort.dir === 'asc' ? '오름차순' : '내림차순'}으로 정렬 중`
+            : `'${activeCol.label}' ${sort.dir === 'asc' ? '오름차순' : '내림차순'} 우선, 같은 값은 '${sortLabel}'으로 정렬 중`}
+          {' · 열 제목을 한 번 더 누르면 반대 방향, 세 번째는 해제'}
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1060px] text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
@@ -125,14 +139,18 @@ export default function ItemTable({ rows, ctx, months }) {
                     <td className="px-3 py-2 text-right tabular-nums">{fmtPct(m.inboundRate, 0)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${m.risk === 'danger' ? 'text-red-600' : m.risk === 'warn' ? 'text-amber-600' : ''}`}>{fmt(m.projectedEnd)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${TONE[paceTone(m.pace)]}`}>{fmtPct(m.pace, 0)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${risk.cls}`}>{risk.label}</span>
-                      {m.spikeRatio != null && m.spikeRatio >= 2 && (
-                        <span className="ml-1 rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">판매 급증</span>
-                      )}
-                      {m.dropRatio != null && m.dropRatio <= 0.5 && (
-                        <span className="ml-1 rounded bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">판매 급감</span>
-                      )}
+                    <td className="px-3 py-2">
+                      <div className="flex min-w-[150px] flex-wrap gap-1">
+                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${risk.cls}`}>{risk.label}</span>
+                        {m.spikeRatio != null && m.spikeRatio >= 2 && (
+                          <span className="rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">판매 급증</span>
+                        )}
+                        {m.dropRatio != null && m.dropRatio <= 0.5 && (
+                          <span className="rounded bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">판매 급감</span>
+                        )}
+                        {m.noSalesPlan && <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">영업계획 없음</span>}
+                        {m.noProdPlan && <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">생산계획 없음</span>}
+                      </div>
                     </td>
                   </tr>
                   {open && (

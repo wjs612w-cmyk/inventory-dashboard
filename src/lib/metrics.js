@@ -58,11 +58,15 @@ export function computeMetrics(item, { basis = '7', ctx }) {
   // 판매 급감: 직전 3주 평균이 어느 정도 있던 품목이 최근 7일에 얼마나 줄었는지 (0 = 판매 중단)
   const dropRatio = prevAvg >= DROP_MIN_QTY ? w1 / prevAvg : null
 
+  // 계획 누락(입력 실수 의심): 계획 없이 출고·입고된 품목
+  const noSalesPlan = !(item.salesPlan > 0) && item.shipped > 0
+  const noProdPlan = !(item.prodPlan > 0) && item.inbound > 0
+
   let risk = 'ok'
   if (projectedEnd < -0.5) risk = 'danger'
   else if (dailyAvg > 0 && projectedEnd < dailyAvg * 7) risk = 'warn'
 
-  return { dailyAvg, inboundRate, pendingInbound, projectedEnd, pace, achieved, forecast, coverDays, wow, risk, prevAvg, spikeRatio, dropRatio }
+  return { dailyAvg, inboundRate, pendingInbound, projectedEnd, pace, achieved, forecast, coverDays, wow, risk, prevAvg, spikeRatio, dropRatio, noSalesPlan, noProdPlan }
 }
 
 export function aggregate(items) {
@@ -75,12 +79,12 @@ export function aggregate(items) {
       a.salesPlan += it.salesPlan
       a.shipped += it.shipped
       a.planShipped += it.planShipped
-      a.planForecast += it.planForecast
+      a.sheetForecast += it.sheetForecast
       a.prevShipped += it.prevShipped
       a.weekly = a.weekly.map((v, i) => v + it.weekly[i])
       return a
     },
-    { stock: 0, prodPlan: 0, inbound: 0, planInbound: 0, salesPlan: 0, shipped: 0, planShipped: 0, planForecast: 0, prevShipped: 0, weekly: [0, 0, 0, 0] }
+    { stock: 0, prodPlan: 0, inbound: 0, planInbound: 0, salesPlan: 0, shipped: 0, planShipped: 0, sheetForecast: 0, prevShipped: 0, weekly: [0, 0, 0, 0] }
   )
 }
 
@@ -94,10 +98,10 @@ export function summarize(items, opts) {
     dailyAvg: sum(ms.map((m) => m.dailyAvg)),
     pendingInbound: sum(ms.map((m) => m.pendingInbound)),
     projectedEnd: sum(ms.map((m) => m.projectedEnd)),
-    inboundRate: t.prodPlan > 0 ? (t.planInbound / t.prodPlan) * 100 : null,
-    pace: t.salesPlan > 0 ? (t.planShipped / (t.salesPlan * (ctx.elapsed / ctx.daysInMonth))) * 100 : null,
-    achieved: t.salesPlan > 0 ? (t.planShipped / t.salesPlan) * 100 : null,
-    forecast: FORECAST_SOURCE === 'sheet' ? t.planForecast : (t.planShipped / ctx.elapsed) * ctx.daysInMonth,
+    inboundRate: t.prodPlan > 0 ? (t.inbound / t.prodPlan) * 100 : null, // 계획 없는 품목의 입고도 포함
+    pace: t.salesPlan > 0 ? (t.shipped / (t.salesPlan * (ctx.elapsed / ctx.daysInMonth))) * 100 : null, // 계획 없는 품목의 출고도 포함
+    achieved: t.salesPlan > 0 ? (t.shipped / t.salesPlan) * 100 : null,
+    forecast: FORECAST_SOURCE === 'sheet' ? t.sheetForecast : (t.shipped / ctx.elapsed) * ctx.daysInMonth,
     danger: ms.filter((m) => m.risk === 'danger').length,
     warn: ms.filter((m) => m.risk === 'warn').length,
   }

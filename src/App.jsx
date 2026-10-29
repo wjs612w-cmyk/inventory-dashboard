@@ -11,6 +11,18 @@ import Breadcrumb from './components/Breadcrumb'
 
 const uniq = (arr) => [...new Set(arr)].sort((a, b) => a.localeCompare(b, 'ko'))
 
+const RISK_ORDER = { danger: 0, warn: 1, ok: 2 }
+const SORT_LABELS = {
+  risk: '재고 위험 순',
+  sales: '최근 7일 판매 많은 순',
+  stock: '현재고 많은 순',
+  pace: '영업 진도율 낮은 순',
+  paceDesc: '영업 진도율 높은 순',
+  spike: '최근 7일 판매 급증 순',
+  drop: '최근 7일 판매 급감 순',
+  name: '품목명 순',
+}
+
 // 급증 정렬용 값: 기준 미달(null)은 맨 뒤, 신규(Infinity)는 맨 앞
 const spikeKey = (m) => (m.spikeRatio == null ? -1 : Math.min(m.spikeRatio, 1e9))
 // 급감 정렬용 값: 많이 줄어든(작은 비율) 품목이 앞, 기준 미달(null)은 맨 뒤
@@ -88,15 +100,18 @@ export default function App() {
   const moveCounts = useMemo(() => {
     let up = 0
     let down = 0
+    let missing = 0
     moveMetrics.forEach((m) => {
       if (m.spikeRatio != null && m.spikeRatio >= 2) up += 1
       if (m.dropRatio != null && m.dropRatio <= 0.5) down += 1
+      if (m.noSalesPlan || m.noProdPlan) missing += 1
     })
-    return { up, down }
+    return { up, down, missing }
   }, [moveMetrics])
 
   const filtered = useMemo(() => {
     if (moveFilter === '0') return scoped
+    if (moveFilter === 'miss') return scoped.filter((i) => moveMetrics.get(i.id).noSalesPlan || moveMetrics.get(i.id).noProdPlan)
     const [kind, v] = moveFilter.split(':')
     const t = Number(v)
     return scoped.filter((i) => {
@@ -259,6 +274,7 @@ export default function App() {
               {[
                 ['up:2', `판매 급증 ${moveCounts.up}개`, 'border-violet-300 bg-violet-600'],
                 ['down:0.5', `판매 급감 ${moveCounts.down}개`, 'border-orange-300 bg-orange-600'],
+                ['miss', `계획 누락 ${moveCounts.missing}개`, 'border-slate-400 bg-slate-700'],
               ].map(([v, label, on]) => (
                 <button
                   key={v}
@@ -269,9 +285,9 @@ export default function App() {
                   {label}
                 </button>
               ))}
-              <span className="text-xs text-slate-500">급증 = 직전 3주 평균의 2배 이상, 급감 = 절반 이하</span>
+              <span className="text-xs text-slate-500">급증 = 직전 3주 평균의 2배 이상, 급감 = 절반 이하, 계획 누락 = 영업·생산계획 없이 출고·입고된 품목</span>
             </div>
-            <ItemTable key={`${category}|${brand}|${group}|${sub}|${query}|${sort}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} months={months} />
+            <ItemTable key={`${category}|${brand}|${group}|${sub}|${query}|${basis}|${hideInactive}|${moveFilter}`} rows={rows} ctx={ctx} months={months} sortLabel={SORT_LABELS[sort]} groupBy={sort === 'risk' ? (r) => RISK_ORDER[r.m.risk] : null} />
           </section>
         </>
       )}

@@ -87,7 +87,6 @@ function parseRows(rows) {
       stock: n0(r, 'stock'),
       // 계획이 있는 품목만 진도율·입고율 집계에 포함하기 위한 보조 값
       planShipped: salesPlan > 0 ? shipped : 0,
-      planForecast: salesPlan > 0 ? sheetForecast : 0,
       planInbound: prodPlan > 0 ? inbound : 0,
       // 과거 → 최근
       weekly: [n0(r, 'w4'), n0(r, 'w3'), n0(r, 'w2'), n0(r, 'w1')],

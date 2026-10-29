@@ -15,10 +15,12 @@ export const paceTone = (p) => (p == null ? 'default' : p >= 100 ? 'good' : p >=
 
 export default function KpiCards({ s, ctx }) {
   const cover = s.dailyAvg > 0 ? s.total.stock / s.dailyAvg : null
-  // 진도율·입고율은 '계획이 있는 품목'만으로 계산합니다. 계획 없는 품목의 출고·입고는 총량과 따로 보여 줍니다.
+  // 진도율·입고율에는 계획 없이 출고·입고된 품목도 포함합니다. 입력 누락이 의심되는 수량은 따로 알려 줍니다.
   const t = s.total
-  const shippedTxt = t.shipped !== t.planShipped ? `총 출고 ${fmt(t.shipped)} 중 영업계획 있는 품목 ${fmt(t.planShipped)}` : `출고 ${fmt(t.shipped)}`
-  const inboundTxt = t.inbound !== t.planInbound ? `총 입고 ${fmt(t.inbound)} 중 생산계획 있는 품목 ${fmt(t.planInbound)}` : `입고 ${fmt(t.inbound)}`
+  const noPlanShipped = t.shipped - t.planShipped
+  const noPlanInbound = t.inbound - t.planInbound
+  const shippedTxt = noPlanShipped > 0 ? `출고 ${fmt(t.shipped)} (영업계획 없는 품목 ${fmt(noPlanShipped)} 포함)` : `출고 ${fmt(t.shipped)}`
+  const inboundTxt = noPlanInbound > 0 ? `입고 ${fmt(t.inbound)} (생산계획 없는 품목 ${fmt(noPlanInbound)} 포함)` : `입고 ${fmt(t.inbound)}`
   return (
     <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Kpi

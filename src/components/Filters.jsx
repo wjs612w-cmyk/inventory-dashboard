@@ -85,6 +85,7 @@ export default function Filters({ category, setCategory, brand, setBrand, brands
               <option value="down:0.5">50% 이상 감소</option>
               <option value="down:0.3">70% 이상 감소</option>
             </optgroup>
+            <option value="miss">계획 없이 출고·입고된 품목</option>
           </select>
         </label>
 
