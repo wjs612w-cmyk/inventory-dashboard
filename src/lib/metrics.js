@@ -103,8 +103,18 @@ export function summarize(items, opts) {
   }
 }
 
+// 지정한 순서(order)대로 정렬. 목록에 없는 값은 맨 뒤에 원래 순서를 유지한 채 붙습니다. (공백은 무시)
+export function sortByOrder(list, order, key = (x) => x) {
+  if (!order) return list
+  const idx = (x) => {
+    const i = order.indexOf(String(key(x)).replace(/\s+/g, ''))
+    return i < 0 ? order.length : i
+  }
+  return [...list].sort((a, b) => idx(a) - idx(b))
+}
+
 // 그룹별 추이. mode: 'qty' 수량 / 'index' 지수(첫 기간 = 100). 그룹이 많으면 상위 N-1 + 기타
-export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_SERIES, limit = 8) {
+export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_SERIES, limit = 8, order = null) {
   const n = series.labels.length
   const groups = new Map()
   items.forEach((it) => {
@@ -120,6 +130,7 @@ export function buildGroupedTrend(items, groupKey, mode = 'qty', series = WEEK_S
     rest.forEach(([, w]) => w.forEach((v, i) => (other[i] += v)))
     entries = [...entries.slice(0, limit - 1), ['기타', other]]
   }
+  if (order) entries = sortByOrder(entries, order, (e) => e[0])
   const names = entries.map((e) => e[0])
   const data = series.labels.map((label, i) => {
     const row = { label }
@@ -141,7 +152,7 @@ export const fmt = (n, d = 0) =>
 export const fmtPct = (n, d = 1) => (n == null || !Number.isFinite(n) ? '–' : `${n.toFixed(d)}%`)
 
 // 대표 보고용 카드 요약: 그룹별 현재 기간 값 · 직전 기간 대비 · 처음 기간 대비
-export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit = 12) {
+export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit = 12, order = null) {
   const n = series.labels.length
   const map = new Map()
   items.forEach((it) => {
@@ -160,5 +171,6 @@ export function buildGroupSummary(items, groupKey, series = WEEK_SERIES, limit =
   const totalSeries = new Array(n).fill(0)
   items.forEach((it) => series.get(it).forEach((v, i) => (totalSeries[i] += v)))
   const total = calc({ name: '전체', series: totalSeries, count: items.length })
-  return { groups: all.slice(0, limit), hidden: Math.max(0, all.length - limit), total }
+  const ordered = order ? sortByOrder(all, order, (g) => g.name) : all
+  return { groups: ordered.slice(0, limit), hidden: Math.max(0, all.length - limit), total }
 }

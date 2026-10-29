@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSheetData } from './hooks'
-import { CATEGORIES, FORECAST_SOURCE } from './config'
-import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, summarize } from './lib/metrics'
+import { CATEGORIES, FORECAST_SOURCE, SUB_ORDER } from './config'
+import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, sortByOrder, summarize } from './lib/metrics'
 import Filters from './components/Filters'
 import KpiCards from './components/KpiCards'
 import TrendChart from './components/TrendChart'
@@ -73,10 +73,10 @@ export default function App() {
   const groups = useMemo(() => uniq(byBrand.map((i) => i.group)), [byBrand])
   const byGroup = useMemo(() => (group === '전체' ? byBrand : byBrand.filter((i) => i.group === group)), [byBrand, group])
   const subs = useMemo(() => {
-    const real = uniq(byGroup.map((i) => i.sub).filter((s) => s && s !== '(미분류)'))
+    const real = sortByOrder(uniq(byGroup.map((i) => i.sub).filter((s) => s && s !== '(미분류)')), SUB_ORDER[category])
     if (real.length === 0) return [] // 하위카테고리 값이 없으면 이 단계는 건너뜁니다
     return byGroup.some((i) => i.sub === '(미분류)') ? [...real, '(미분류)'] : real
-  }, [byGroup])
+  }, [byGroup, category])
 
   const scoped = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -115,9 +115,11 @@ export default function App() {
     : sub === '전체' && subs.length > 0 ? 'sub'
     : 'name'
   const groupLabel = { category: '품목군별', brand: '브랜드별', group: '카테고리별', sub: '하위카테고리별', name: '품목별' }[groupKey]
-  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series), [filtered, groupKey, trendMode, series])
+  // 하위카테고리 단계에서는 config.js의 SUB_ORDER 순서(예: 마스크 대형→중형→소형…)로 보여 줍니다
+  const subOrder = groupKey === 'sub' ? SUB_ORDER[category] ?? null : null
+  const trend = useMemo(() => buildGroupedTrend(filtered, groupKey, trendMode, series, 8, subOrder), [filtered, groupKey, trendMode, series, subOrder])
 
-  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series), [filtered, groupKey, series])
+  const groupSummary = useMemo(() => buildGroupSummary(filtered, groupKey, series, 12, subOrder), [filtered, groupKey, series, subOrder])
 
   const rows = useMemo(() => {
     const order = { danger: 0, warn: 1, ok: 2 }
