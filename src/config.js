@@ -22,6 +22,7 @@ export const COLUMNS = {
   salesPlan: '당월 영업계획',
   sheetProgress: '계획 진도율',
   nextSalesPlan: '다음달 영업계획',
+  prev3Shipped: '전전전월 출고량', // 선택 열
   prev2Shipped: '전전월 출고량', // 선택 열: 없으면 월별 그래프가 2개월만 표시됩니다
   prevShipped: '전월 출고량',
   shipped: '당월 출고량',
@@ -56,3 +57,6 @@ export const FORECAST_SOURCE = 'sheet'
 export const SUB_ORDER = {
   마스크: ['대형', '중형', '소형', '초소형', '초초소형'],
 }
+
+// 월별 그래프에 당월(예상)을 보여 주기 시작하는 경과일. 월초에는 출고가 0이거나 하루치로 늘려 잡은 값이라 부정확해서 숨깁니다.
+export const MONTH_FORECAST_MIN_DAYS = 7

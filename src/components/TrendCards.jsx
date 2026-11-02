@@ -33,14 +33,14 @@ function Card({ g, onSelect, info }) {
 
       <div className="mt-2 h-20">
         <ResponsiveContainer width="100%" height="100%">
-          {info.estimate ? (
+          {info.bars ? (
             <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }} barCategoryGap="18%">
               <XAxis dataKey="label" hide />
               <YAxis hide domain={[0, 'auto']} />
               <Tooltip formatter={(v) => [v.toLocaleString('ko-KR'), '출고량']} />
               <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                 {data.map((d, i) => (
-                  <Cell key={d.label} fill={color} fillOpacity={i === last ? 0.4 : 0.9} stroke={i === last ? color : 'none'} strokeDasharray="3 2" />
+                  <Cell key={d.label} fill={color} fillOpacity={info.estimate && i === last ? 0.4 : 0.9} stroke={info.estimate && i === last ? color : 'none'} strokeDasharray="3 2" />
                 ))}
               </Bar>
             </BarChart>
@@ -61,7 +61,7 @@ function Card({ g, onSelect, info }) {
         </ResponsiveContainer>
       </div>
 
-      {info.estimate && (
+      {info.bars && (
         <div className="mt-1 grid gap-1 text-center text-[11px] text-slate-500" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
           {data.map((d) => (
             <div key={d.label}>

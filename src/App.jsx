@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSheetData } from './hooks'
-import { CATEGORIES, FORECAST_SOURCE, SUB_ORDER } from './config'
+import { CATEGORIES, FORECAST_SOURCE, MONTH_FORECAST_MIN_DAYS, SUB_ORDER } from './config'
 import { WEEK_SERIES, buildGroupedTrend, buildGroupSummary, computeMetrics, getMonthContext, isInactive, makeMonthSeries, makeShortLabels, sortByOrder, summarize } from './lib/metrics'
 import Filters from './components/Filters'
 import KpiCards from './components/KpiCards'
@@ -48,27 +48,35 @@ export default function App() {
 
   // 월별 흐름: 전전월(선택 열) · 전월 · 당월(예상)
   const hasPrev2 = useMemo(() => items.some((i) => i.prev2Shipped != null), [items])
-  const months = useMemo(() => makeMonthSeries(ctx, hasPrev2), [ctx, hasPrev2])
+  const hasPrev3 = useMemo(() => items.some((i) => i.prev3Shipped != null), [items])
+  const months = useMemo(() => makeMonthSeries(ctx, { hasPrev2, hasPrev3 }), [ctx, hasPrev2, hasPrev3])
   const series = period === 'month' ? months : WEEK_SERIES
-  const periodInfo = useMemo(
-    () =>
-      period === 'week'
-        ? { cur: '최근 7일', c1: '전주', cf: '4주 전', short: ['4주 전', '3주 전', '2주 전', '최근'], estimate: false, base: '22~28일 전', note: '' }
-        : {
-            cur: `${ctx.month}월 예상`,
-            c1: '전월',
-            cf: hasPrev2 ? '2개월 전' : null,
-            short: months.labels,
-            estimate: true,
-            base: months.labels[0],
-            note:
-              (FORECAST_SOURCE === 'sheet'
-                ? ` ${ctx.month}월(예상)은 시트의 '당월 예상 판매량' 값입니다.`
-                : ` ${ctx.month}월(예상)은 당월 출고량 ÷ 경과일 × 월 일수로 계산한 값입니다.`) +
-              (hasPrev2 ? '' : " 시트에서 '전전월 출고량' 열을 찾지 못해 2개월만 표시합니다."),
-          },
-    [period, ctx, hasPrev2, months]
-  )
+  const periodInfo = useMemo(() => {
+    if (period === 'week') {
+      return { cur: '최근 7일', c1: '전주', cf: '4주 전', short: ['4주 전', '3주 전', '2주 전', '최근'], bars: false, estimate: false, base: '22~28일 전', note: '' }
+    }
+    const L = months.labels
+    const n = L.length
+    const clean = (x) => x.replace('(예상)', '')
+    const notes = []
+    if (months.hasCurrent) {
+      notes.push(FORECAST_SOURCE === 'sheet' ? ` ${ctx.month}월(예상)은 시트의 '당월 예상 판매량' 값입니다.` : ` ${ctx.month}월(예상)은 당월 출고량 ÷ 경과일 × 월 일수로 계산한 값입니다.`)
+    } else {
+      notes.push(` ${ctx.month}월은 집계 초반(경과 ${ctx.elapsed}일)이라 예상을 표시하지 않았습니다. ${MONTH_FORECAST_MIN_DAYS}일 이상 지나면 자동으로 나타납니다.`)
+    }
+    if (!hasPrev3) notes.push(" 시트에서 '전전전월 출고량' 열을 찾지 못했습니다.")
+    if (!hasPrev2) notes.push(" 시트에서 '전전월 출고량' 열을 찾지 못했습니다.")
+    return {
+      cur: months.hasCurrent ? `${ctx.month}월 예상` : `${clean(L[n - 1])} 출고`,
+      c1: n >= 2 ? `${clean(L[n - 2])} 대비` : '',
+      cf: n >= 3 ? `${clean(L[0])} 대비` : null,
+      short: L,
+      bars: true,
+      estimate: months.hasCurrent,
+      base: L[0],
+      note: notes.join(''),
+    }
+  }, [period, ctx, hasPrev2, hasPrev3, months])
 
   const base = useMemo(() => (hideInactive ? items.filter((i) => !isInactive(i)) : items), [items, hideInactive])
   const counts = useMemo(() => {

@@ -155,7 +155,7 @@ export default function ItemTable({ rows, ctx, months, sortLabel, groupBy }) {
                   </tr>
                   {open && (
                     <tr>
-                      <td colSpan={COLS.length} className="p-0"><ItemDetail item={it} m={m} ctx={ctx} monthly={{ labels: months.labels, values: months.get(it) }} /></td>
+                      <td colSpan={COLS.length} className="p-0"><ItemDetail item={it} m={m} ctx={ctx} monthly={{ labels: months.labels, values: months.get(it), hasCurrent: months.hasCurrent }} /></td>
                     </tr>
                   )}
                 </Fragment>

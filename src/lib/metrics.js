@@ -1,13 +1,23 @@
-import { WEEK_LABELS, SPIKE_MIN_QTY, DROP_MIN_QTY, FORECAST_SOURCE } from '../config'
+import { WEEK_LABELS, SPIKE_MIN_QTY, DROP_MIN_QTY, FORECAST_SOURCE, MONTH_FORECAST_MIN_DAYS } from '../config'
 
 const sum = (a) => a.reduce((x, y) => x + y, 0)
 
 // 시트 1행의 "경과일수"(예: 27)를 기준일로 사용. 없으면 어제까지로 가정.
+// 경과일이 오늘 날짜보다 크면(월초인데 시트가 아직 지난달 마지막 날 데이터) 시트의 달을 지난달로 봅니다.
 export function getMonthContext(elapsedFromSheet, today = new Date()) {
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  let y = today.getFullYear()
+  let mo = today.getMonth()
+  if (elapsedFromSheet && elapsedFromSheet > today.getDate()) {
+    mo -= 1
+    if (mo < 0) {
+      mo = 11
+      y -= 1
+    }
+  }
+  const daysInMonth = new Date(y, mo + 1, 0).getDate()
   const fallback = Math.max(1, today.getDate() - 1)
   const elapsed = Math.min(daysInMonth, Math.max(1, elapsedFromSheet || fallback))
-  return { month: today.getMonth() + 1, daysInMonth, elapsed, remaining: daysInMonth - elapsed, fromSheet: !!elapsedFromSheet }
+  return { month: mo + 1, daysInMonth, elapsed, remaining: daysInMonth - elapsed, fromSheet: !!elapsedFromSheet }
 }
 
 // 월말 예상 출고(판매)량: 시트의 '당월 예상 판매량' 또는 직접 계산 (config.js의 FORECAST_SOURCE)
@@ -19,13 +29,17 @@ export function forecastOf(it, ctx) {
 // 그래프용 기간 정의: 주간(최근 4주) / 월별(전전월·전월·당월 예상)
 export const WEEK_SERIES = { labels: WEEK_LABELS, get: (it) => it.weekly }
 
-export function makeMonthSeries(ctx, hasPrev2) {
+// 월별: 지난 달들(전전전월·전전월·전월) + 월초가 지나 값이 의미 있어지면 당월(예상)
+export function makeMonthSeries(ctx, { hasPrev2 = true, hasPrev3 = true } = {}) {
   const m = ctx.month
   const mm = (k) => ((m - 1 - k + 12) % 12) + 1 // k개월 전의 '월'
-  const all = [`${mm(2)}월`, `${mm(1)}월`, `${m}월(예상)`]
-  return hasPrev2
-    ? { labels: all, get: (it) => [it.prev2Shipped ?? 0, it.prevShipped, forecastOf(it, ctx)] }
-    : { labels: all.slice(1), get: (it) => [it.prevShipped, forecastOf(it, ctx)] }
+  const cols = []
+  if (hasPrev3) cols.push({ label: `${mm(3)}월`, get: (it) => it.prev3Shipped ?? 0 })
+  if (hasPrev2) cols.push({ label: `${mm(2)}월`, get: (it) => it.prev2Shipped ?? 0 })
+  cols.push({ label: `${mm(1)}월`, get: (it) => it.prevShipped })
+  const hasCurrent = ctx.elapsed >= MONTH_FORECAST_MIN_DAYS
+  if (hasCurrent) cols.push({ label: `${m}월(예상)`, get: (it) => forecastOf(it, ctx) })
+  return { labels: cols.map((c) => c.label), get: (it) => cols.map((c) => c.get(it)), hasCurrent }
 }
 
 /**

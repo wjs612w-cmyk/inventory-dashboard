@@ -38,7 +38,7 @@ export default function ItemDetail({ item, m, ctx, monthly }) {
         <Stat label="월말 예상 판매" value={fmt(m.forecast)} />
         <Stat label="영업계획 진도율" value={fmtPct(m.pace)} />
         <Stat label="계획 대비 누적 달성" value={fmtPct(m.achieved)} />
-        {monthly.labels.slice(0, -1).map((l, i) => (
+        {(monthly.hasCurrent ? monthly.labels.slice(0, -1) : monthly.labels).map((l, i) => (
           <Stat key={l} label={`${l} 출고량`} value={fmt(monthly.values[i])} />
         ))}
         <Stat label="당월 생산계획" value={fmt(item.prodPlan)} />

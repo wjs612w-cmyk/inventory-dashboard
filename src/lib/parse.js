@@ -42,7 +42,7 @@ function parseRows(rows) {
   const header = rows[hi].map(norm)
   const idx = {}
   const missing = []
-  const OPTIONAL = new Set(['prev2Shipped', 'sub']) // 없어도 동작하는 열
+  const OPTIONAL = new Set(['prev3Shipped', 'prev2Shipped', 'sub']) // 없어도 동작하는 열
   for (const [key, title] of Object.entries(COLUMNS)) {
     const i = header.indexOf(norm(title))
     if (i < 0 && !OPTIONAL.has(key)) missing.push(title)
@@ -79,6 +79,7 @@ function parseRows(rows) {
       sheetProgress: num(r, 'sheetProgress'),
       sheetForecast,
       prevShipped: n0(r, 'prevShipped'),
+      prev3Shipped: idx.prev3Shipped >= 0 ? n0(r, 'prev3Shipped') : null,
       prev2Shipped: idx.prev2Shipped >= 0 ? n0(r, 'prev2Shipped') : null,
       shipped,
       prodPlan,
